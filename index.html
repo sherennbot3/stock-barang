@@ -466,9 +466,43 @@ function load(){
 let DB=load(),ITEMS,HIST,bySku;
 function reindex(){ITEMS=DB.items;HIST=DB.hist;bySku={};ITEMS.forEach(i=>{bySku[i.sku]=i})}
 reindex();
+let syncTimer=0;
+let syncNoticeShown=false;
+function saveLocal(){
+  try{localStorage.setItem(KEY,JSON.stringify(DB));return true}
+  catch(e){toast('Perubahan belum bisa disimpan di browser ini.');return false}
+}
+async function syncCloud(){
+  try{
+    const r=await fetch('/api/data',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(DB)});
+    if(!r.ok)throw new Error('sync failed');
+  }catch(e){
+    if(!syncNoticeShown&&location.protocol!=='file:'){
+      syncNoticeShown=true;
+      toast('Mode lokal aktif. Hubungkan database Vercel untuk sinkronisasi antar perangkat.');
+    }
+  }
+}
 function persist(){
-  try{localStorage.setItem(KEY,JSON.stringify(DB))}
-  catch(e){toast('Perubahan belum bisa disimpan di browser ini.')}
+  if(!saveLocal())return;
+  clearTimeout(syncTimer);
+  syncTimer=setTimeout(syncCloud,150);
+}
+async function loadCloud(){
+  if(location.protocol==='file:')return;
+  try{
+    const r=await fetch('/api/data');
+    if(!r.ok)throw new Error('cloud unavailable');
+    const payload=await r.json();
+    if(payload.data){
+      const d=normalize(payload.data);
+      if(d){DB=d;reindex();saveLocal();refresh();toast('Data cloud tersinkronisasi.');}
+    }else{
+      await syncCloud();
+    }
+  }catch(e){
+    syncNoticeShown=true;
+  }
 }
 
 /* ================= pembantu tampilan ================= */
@@ -973,6 +1007,7 @@ $('#fabIc').innerHTML=ic('plus',26);
 themeIcons();
 paintChrome();
 setView('ringkasan');
+loadCloud();
 })();
 </script>
 </body>
