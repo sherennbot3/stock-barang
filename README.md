@@ -1,6 +1,6 @@
 # Stok Barang
 
-Aplikasi inventaris ringan dengan penyimpanan local-first dan sinkronisasi MongoDB Atlas melalui Vercel Functions.
+Aplikasi inventaris ringan dengan penyimpanan MongoDB Atlas melalui Vercel Functions.
 
 ## Jalankan lokal
 
@@ -15,7 +15,7 @@ Untuk menguji sinkronisasi cloud, jalankan lewat Vercel CLI atau dev server yang
 3. Deploy ulang.
 4. Database `stok_barang` dan collection `app_state` akan dibuat otomatis pada request pertama.
 
-API menyimpan satu workspace inventaris dalam satu dokumen MongoDB. Endpoint `GET /api/data` mengambil data dan `PUT /api/data` menyimpan perubahan. Aplikasi tetap bekerja offline menggunakan `localStorage` bila database belum dikonfigurasi.
+API menyimpan satu workspace inventaris dalam satu dokumen MongoDB. Endpoint `GET /api/data` mengambil data dan `PUT /api/data` menyimpan setiap perubahan. Data inventaris tidak disimpan di `localStorage`.
 
 ## Fitur
 

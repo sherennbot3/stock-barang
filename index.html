@@ -356,7 +356,6 @@ button.avatar{border:0;padding:0;font-family:inherit;cursor:pointer}
 'use strict';
 
 /* ================= util ================= */
-const KEY='sb-data-v1';
 const $=(s,r)=>(r||document).querySelector(s);
 const $$=(s,r)=>Array.from((r||document).querySelectorAll(s));
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -459,19 +458,15 @@ function normalize(d){
   return {items,hist,set:{toko:String(s.toko||'Toko Saya'),user:String(s.user||'Admin')}};
 }
 function fresh(){const items=seedItems();return {items,hist:seedHist(items),set:{toko:'Toko Saya',user:'Rina Anggraini'}}}
+function empty(){return {items:[],hist:[],set:{toko:'Toko Saya',user:'Rina Anggraini'}}}
 function load(){
-  try{const raw=localStorage.getItem(KEY);if(raw){const d=normalize(JSON.parse(raw));if(d)return d}}catch(e){}
-  return fresh();
+  return empty();
 }
 let DB=load(),ITEMS,HIST,bySku;
 function reindex(){ITEMS=DB.items;HIST=DB.hist;bySku={};ITEMS.forEach(i=>{bySku[i.sku]=i})}
 reindex();
-let syncTimer=0;
+let cloudWrite=Promise.resolve();
 let syncNoticeShown=false;
-function saveLocal(){
-  try{localStorage.setItem(KEY,JSON.stringify(DB));return true}
-  catch(e){toast('Perubahan belum bisa disimpan di browser ini.');return false}
-}
 async function syncCloud(){
   try{
     const r=await fetch('/api/data',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(DB)});
@@ -479,14 +474,12 @@ async function syncCloud(){
   }catch(e){
     if(!syncNoticeShown&&location.protocol!=='file:'){
       syncNoticeShown=true;
-      toast('Mode lokal aktif. Hubungkan database Vercel untuk sinkronisasi antar perangkat.');
+      toast('Gagal menyimpan ke database. Periksa koneksi MongoDB Vercel.');
     }
   }
 }
 function persist(){
-  if(!saveLocal())return;
-  clearTimeout(syncTimer);
-  syncTimer=setTimeout(syncCloud,150);
+  cloudWrite=cloudWrite.then(syncCloud);
 }
 async function loadCloud(){
   if(location.protocol==='file:')return;
@@ -496,7 +489,7 @@ async function loadCloud(){
     const payload=await r.json();
     if(payload.data){
       const d=normalize(payload.data);
-      if(d){DB=d;reindex();saveLocal();refresh();toast('Data cloud tersinkronisasi.');}
+      if(d){DB=d;reindex();refresh();toast('Data cloud tersinkronisasi.');}
     }else{
       await syncCloud();
     }
@@ -848,8 +841,8 @@ function openMenu(){
 /* ================= berkas (CSV & cadangan) ================= */
 const csv=rows=>'\ufeff'+rows.map(r=>r.map(c=>{
   c=String(c);if(/^[=+\-@]/.test(c))c="'"+c;
-  return /[;"\n\r]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c;
-}).join(';')).join('\r\n');
+  return /[,;"\n\r]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c;
+}).join(',')).join('\r\n');
 function blobSave(name,text,type){
   const b=new Blob([text],{type:type+';charset=utf-8'}),u=URL.createObjectURL(b),a=document.createElement('a');
   a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();

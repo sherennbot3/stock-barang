@@ -10,9 +10,13 @@ function validData(data) {
 }
 
 function getClient() {
-  if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI is not configured');
+  const uri = process.env.MONGODB_URI?.trim().replace(/^['"]|['"]$/g, '');
+  if (!uri) throw new Error('MONGODB_URI is not configured');
+  if (!/^mongodb(?:\+srv)?:\/\//.test(uri)) {
+    throw new Error('MONGODB_URI must start with mongodb:// or mongodb+srv://');
+  }
   if (!clientPromise) {
-    const client = new MongoClient(process.env.MONGODB_URI);
+    const client = new MongoClient(uri);
     clientPromise = client.connect();
   }
   return clientPromise;
