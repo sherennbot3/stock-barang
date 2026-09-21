@@ -1,19 +1,21 @@
-import { sql } from '@vercel/postgres';
+import { MongoClient } from 'mongodb';
 
-const TABLE = 'app_state';
+const DATABASE_NAME = 'stok_barang';
+const COLLECTION_NAME = 'app_state';
+const DOCUMENT_ID = 'main';
+let clientPromise;
 
 function validData(data) {
   return data && Array.isArray(data.items) && Array.isArray(data.hist) && data.set && typeof data.set === 'object';
 }
 
-async function ensureTable() {
-  await sql`
-    CREATE TABLE IF NOT EXISTS app_state (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
-      payload JSONB NOT NULL,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `;
+function getClient() {
+  if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI is not configured');
+  if (!clientPromise) {
+    const client = new MongoClient(process.env.MONGODB_URI);
+    clientPromise = client.connect();
+  }
+  return clientPromise;
 }
 
 export default async function handler(request, response) {
@@ -22,17 +24,18 @@ export default async function handler(request, response) {
     return response.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (!process.env.POSTGRES_URL) {
-    return response.status(503).json({ error: 'POSTGRES_URL is not configured' });
+  if (!process.env.MONGODB_URI) {
+    return response.status(503).json({ error: 'MONGODB_URI is not configured' });
   }
 
   try {
-    await ensureTable();
+    const client = await getClient();
+    const collection = client.db(DATABASE_NAME).collection(COLLECTION_NAME);
 
     if (request.method === 'GET') {
-      const result = await sql`SELECT payload, updated_at FROM app_state WHERE id = 1`;
-      if (!result.rows.length) return response.status(200).json({ data: null });
-      return response.status(200).json({ data: result.rows[0].payload, updatedAt: result.rows[0].updated_at });
+      const result = await collection.findOne({ _id: DOCUMENT_ID });
+      if (!result) return response.status(200).json({ data: null });
+      return response.status(200).json({ data: result.payload, updatedAt: result.updatedAt });
     }
 
     const data = request.body;
@@ -40,11 +43,11 @@ export default async function handler(request, response) {
       return response.status(400).json({ error: 'Invalid data payload' });
     }
 
-    await sql`
-      INSERT INTO app_state (id, payload, updated_at)
-      VALUES (1, ${JSON.stringify(data)}::jsonb, NOW())
-      ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()
-    `;
+    await collection.updateOne(
+      { _id: DOCUMENT_ID },
+      { $set: { payload: data, updatedAt: new Date() } },
+      { upsert: true }
+    );
     return response.status(200).json({ ok: true });
   } catch (error) {
     console.error('Database request failed', error);
