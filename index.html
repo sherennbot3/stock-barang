@@ -357,6 +357,7 @@ button.avatar{border:0;padding:0;font-family:inherit;cursor:pointer}
 
 /* ================= util ================= */
 const $=(s,r)=>(r||document).querySelector(s);
+const KEY='sb-data-v1';
 const $$=(s,r)=>Array.from((r||document).querySelectorAll(s));
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const nf=new Intl.NumberFormat('id-ID');
@@ -466,35 +467,29 @@ let DB=load(),ITEMS,HIST,bySku;
 function reindex(){ITEMS=DB.items;HIST=DB.hist;bySku={};ITEMS.forEach(i=>{bySku[i.sku]=i})}
 reindex();
 let cloudWrite=Promise.resolve();
-let syncNoticeShown=false;
+let cloudNoticeShown=false;
 async function syncCloud(){
-  try{
-    const r=await fetch('/api/data',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(DB)});
-    if(!r.ok)throw new Error('sync failed');
-  }catch(e){
-    if(!syncNoticeShown&&location.protocol!=='file:'){
-      syncNoticeShown=true;
-      toast('Gagal menyimpan ke database. Periksa koneksi MongoDB Vercel.');
-    }
-  }
+  const r=await fetch('/api/data',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(DB)});
+  if(!r.ok)throw new Error('cloud write failed');
 }
 function persist(){
-  cloudWrite=cloudWrite.then(syncCloud);
+  cloudWrite=cloudWrite.then(syncCloud).catch(e=>{
+    if(!cloudNoticeShown){cloudNoticeShown=true;toast('Gagal menyimpan ke database MongoDB.');}
+  });
 }
 async function loadCloud(){
-  if(location.protocol==='file:')return;
   try{
     const r=await fetch('/api/data');
-    if(!r.ok)throw new Error('cloud unavailable');
-    const payload=await r.json();
-    if(payload.data){
-      const d=normalize(payload.data);
-      if(d){DB=d;reindex();refresh();toast('Data cloud tersinkronisasi.');}
+    if(!r.ok)throw new Error('cloud read failed');
+    const result=await r.json();
+    if(result.data){
+      const data=normalize(result.data);
+      if(data){DB=data;reindex();paintChrome();setView(state.view,{keep:true});}
     }else{
       await syncCloud();
     }
   }catch(e){
-    syncNoticeShown=true;
+    if(!cloudNoticeShown){cloudNoticeShown=true;toast('Database belum terhubung. Perubahan belum tersimpan.');}
   }
 }
 
